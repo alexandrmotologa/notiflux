@@ -6,8 +6,9 @@ import {
   XCircle,
   Clock,
   Cpu,
-  Layers,
   ArrowRight,
+  Eye,
+  MousePointerClick,
 } from "lucide-react";
 import type { SystemHealth, DeliveryLog, Workflow } from "../types";
 import { triggerNotification } from "../api";
@@ -72,11 +73,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const sentCount = logs.filter((l) => l.status === "sent").length;
   const failedCount = logs.filter((l) => l.status === "failed").length;
+  const openedCount = logs.filter((l) => !!l.opened_at).length;
+  const clickedCount = logs.filter((l) => !!l.clicked_at).length;
+  const openRate = sentCount > 0 ? ((openedCount / sentCount) * 100).toFixed(1) : "0.0";
+  const ctrRate = sentCount > 0 ? ((clickedCount / sentCount) * 100).toFixed(1) : "0.0";
 
   return (
     <div className="space-y-6">
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-[#111827] border border-[#243247] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between text-gray-400 mb-2">
             <span className="text-sm font-medium">Memory Allocation</span>
@@ -101,7 +106,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="bg-[#111827] border border-[#243247] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-sm font-medium">Dispatched Channels</span>
+            <span className="text-sm font-medium">Dispatches</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-white tracking-tight">
@@ -112,11 +117,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="bg-[#111827] border border-[#243247] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-sm font-medium">Workflows Configured</span>
-            <Layers className="w-4 h-4 text-indigo-400" />
+            <span className="text-sm font-medium">Open Rate</span>
+            <Eye className="w-4 h-4 text-sky-400" />
           </div>
-          <div className="text-2xl font-bold text-white tracking-tight">{workflows.length}</div>
-          <p className="text-xs text-gray-400 mt-1">Multi-channel routing rules</p>
+          <div className="text-2xl font-bold text-white tracking-tight">
+            {openRate}% <span className="text-xs font-normal text-gray-400 ml-1">({openedCount})</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Tracking pixel confirmations</p>
+        </div>
+
+        <div className="bg-[#111827] border border-[#243247] rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-gray-400 mb-2">
+            <span className="text-sm font-medium">CTR (Click-Through)</span>
+            <MousePointerClick className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-bold text-white tracking-tight">
+            {ctrRate}% <span className="text-xs font-normal text-gray-400 ml-1">({clickedCount})</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Verified redirect clicks</p>
         </div>
       </div>
 
@@ -256,10 +274,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <div className="font-medium text-gray-200">
                           {log.workflow_id} <span className="text-gray-500">→</span> {log.subscriber_id}
                         </div>
-                        <div className="text-gray-500 text-[11px]">
-                          Channel: <span className="text-indigo-400 font-mono">{log.channel}</span>
+                        <div className="text-gray-500 text-[11px] flex items-center gap-2">
+                          <span>Channel: <span className="text-indigo-400 font-mono">{log.channel}</span></span>
+                          {log.opened_at && (
+                            <span className="text-sky-400 font-medium flex items-center gap-0.5">
+                              <Eye className="w-3 h-3" /> Opened
+                            </span>
+                          )}
+                          {log.clicked_at && (
+                            <span className="text-amber-400 font-medium flex items-center gap-0.5">
+                              <MousePointerClick className="w-3 h-3" /> Clicked
+                            </span>
+                          )}
                           {log.error_message && (
-                            <span className="text-rose-400 ml-2">({log.error_message})</span>
+                            <span className="text-rose-400 ml-1">({log.error_message})</span>
                           )}
                         </div>
                       </div>

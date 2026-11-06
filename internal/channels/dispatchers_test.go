@@ -263,3 +263,55 @@ func TestDispatcherPool_DispatchAll(t *testing.T) {
 		t.Errorf("expected log notification_id notif_pool_1, got %s", logs[0].NotificationID)
 	}
 }
+
+func TestDiscordDispatcher_MockServer(t *testing.T) {
+	var receivedPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &receivedPayload)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id": "discord_msg_123"}`))
+	}))
+	defer server.Close()
+
+	dispatcher := NewDiscordDispatcher()
+	dispatcher.httpClient = server.Client()
+
+	msg := &engine.CompiledMessage{
+		Channel:   store.ChannelDiscord,
+		Subject:   "Server High Memory Alert",
+		Body:      "Node worker-03 reached 92% memory utilization",
+		ActionURL: "https://monitoring.example.com/nodes/worker-03",
+		Subscriber: &store.Subscriber{
+			ID:                "usr_discord_lead",
+			DiscordWebhookURL: server.URL,
+		},
+		WorkflowID: "infra.alert",
+	}
+
+	if err := dispatcher.Dispatch(context.Background(), msg); err != nil {
+		t.Fatalf("discord dispatch failed: %v", err)
+	}
+
+	if receivedPayload["username"] != "Notiflux" {
+		t.Errorf("expected username Notiflux, got %v", receivedPayload["username"])
+	}
+
+	embeds, ok := receivedPayload["embeds"].([]any)
+	if !ok || len(embeds) == 0 {
+		t.Fatalf("expected embeds array, got %v", receivedPayload["embeds"])
+	}
+	embed := embeds[0].(map[string]any)
+	if embed["title"] != "Server High Memory Alert" {
+		t.Errorf("expected embed title 'Server High Memory Alert', got %v", embed["title"])
+	}
+
+	// Test missing webhook URL error
+	err := dispatcher.Dispatch(context.Background(), &engine.CompiledMessage{
+		Subscriber: &store.Subscriber{ID: "usr_no_discord"},
+	})
+	if err == nil {
+		t.Errorf("expected error for missing discord webhook URL")
+	}
+}
+

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alexandrmotologa/notiflux/internal/store"
 	"github.com/google/uuid"
@@ -27,7 +28,9 @@ type TriggerResponse struct {
 	Success            bool              `json:"success"`
 	NotificationID     string            `json:"notification_id,omitempty"`
 	DispatchedChannels []string          `json:"dispatched_channels"`
+	ScheduledChannels  []string          `json:"scheduled_channels,omitempty"`
 	SkippedChannels    map[string]string `json:"skipped_channels,omitempty"`
+	DigestBuffered     bool              `json:"digest_buffered,omitempty"`
 	ErrorMessage       string            `json:"error,omitempty"`
 }
 
@@ -38,6 +41,7 @@ type CompiledMessage struct {
 	Body         string
 	HTMLBody     string
 	ActionURL    string
+	TrackingID   string
 	Subscriber   *store.Subscriber
 	WorkflowID   string
 	Payload      map[string]any
@@ -80,40 +84,71 @@ func (we *WorkflowEngine) PrepareDispatch(req *TriggerRequest) ([]*CompiledMessa
 	if err := we.store.UpsertSubscriber(&req.Subscriber); err != nil {
 		return nil, "", nil, fmt.Errorf("error updating subscriber: %w", err)
 	}
+	sub, _ := we.store.GetSubscriber(req.Subscriber.ID)
+	if sub == nil {
+		sub = &req.Subscriber
+	}
 
-	// 3. Determine active channels
+	// 3. Digest check: If digest is enabled and request is not marked immediate, buffer it
+	isImmediate := false
+	if immVal, ok := req.Payload["immediate"]; ok && isTruthy(immVal) {
+		isImmediate = true
+	}
+
+	if wf.DigestEnabled && !isImmediate {
+		payloadJSON, _ := json.Marshal(req.Payload)
+		_ = we.store.AddDigestEntry(&store.DigestEntry{
+			WorkflowID:   wf.ID,
+			SubscriberID: sub.ID,
+			Payload:      string(payloadJSON),
+		})
+		// Return empty messages and skipped indicator for digest buffering
+		return nil, "", map[string]string{"digest": "buffered_in_window"}, nil
+	}
+
+	// 4. Determine active channels
 	var overrideChannels []string
 	if req.Overrides != nil && len(req.Overrides.Channels) > 0 {
 		overrideChannels = req.Overrides.Channels
 	}
 
-	activeChannels, skipped, err := we.prefEngine.FilterActiveChannels(wf, &req.Subscriber, overrideChannels)
+	activeChannels, skipped, err := we.prefEngine.FilterActiveChannels(wf, sub, overrideChannels)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("error evaluating channel preferences: %w", err)
 	}
 
-	// 4. Merge data context for compiler
+	// 5. Merge data context for compiler
 	contextData := make(map[string]any)
 	for k, v := range req.Payload {
 		contextData[k] = v
 	}
 	contextData["subscriber"] = map[string]any{
-		"id":               req.Subscriber.ID,
-		"email":            req.Subscriber.Email,
-		"telegram_chat_id": req.Subscriber.TelegramChatID,
+		"id":               sub.ID,
+		"email":            sub.Email,
+		"telegram_chat_id": sub.TelegramChatID,
 	}
 
 	notificationID := uuid.NewString()
 	var compiledMessages []*CompiledMessage
 
 	// Action URL lookup from payload
-	actionURL := ""
-	if urlVal, ok := req.Payload["action_url"]; ok {
-		actionURL = fmt.Sprintf("%v", urlVal)
+	rawActionURL := ""
+	if urlVal, ok := req.Payload["action_url"]; ok && urlVal != nil {
+		rawActionURL = fmt.Sprintf("%v", urlVal)
 	}
 
-	// 5. Compile each active channel
+	// Check Quiet Hours
+	now := time.Now().UTC()
+	inQuiet, quietEnd := IsInQuietHours(sub, now)
+	isUrgent := false
+	if urgVal, ok := req.Payload["urgent"]; ok && isTruthy(urgVal) {
+		isUrgent = true
+	}
+
+	// 6. Compile each active channel
 	for _, ch := range activeChannels {
+		trackingID := "trk_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+
 		tpl, err := we.store.GetTemplateByWorkflowAndChannel(wf.ID, ch)
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("error querying template for %s: %w", ch, err)
@@ -125,7 +160,6 @@ func (we *WorkflowEngine) PrepareDispatch(req *TriggerRequest) ([]*CompiledMessa
 			subjectTmpl = tpl.Subject
 			bodyTmpl = tpl.Body
 		} else {
-			// Fallback: derive from payload title/body or workflow name
 			if tVal, ok := req.Payload["title"]; ok {
 				subjectTmpl = fmt.Sprintf("%v", tVal)
 			} else {
@@ -139,25 +173,63 @@ func (we *WorkflowEngine) PrepareDispatch(req *TriggerRequest) ([]*CompiledMessa
 			}
 		}
 
-		// Interpolate subject
-		renderedSubject, err := we.compiler.Render(subjectTmpl, contextData, false)
-		if err != nil {
-			renderedSubject = subjectTmpl
-		}
+		renderedSubject, _ := we.compiler.Render(subjectTmpl, contextData, false)
+		renderedBody, _ := we.compiler.Render(bodyTmpl, contextData, ch == store.ChannelEmail)
 
-		// Interpolate body
-		escapeHTML := (ch == store.ChannelEmail)
-		renderedBody, err := we.compiler.Render(bodyTmpl, contextData, escapeHTML)
-		if err != nil {
-			renderedBody = bodyTmpl
-		}
+		// Click tracking URL
+		actionURL := rawActionURL
 
 		htmlBody := ""
 		if ch == store.ChannelEmail {
-			// Convert markdown in body to styled HTML email
 			rawRendered, _ := we.compiler.Render(bodyTmpl, contextData, false)
 			convertedHTML := MarkdownToHTML(rawRendered)
+
+			// Append 1x1 open tracking pixel
+			openPixel := fmt.Sprintf(`<img src="/v1/o/%s.png" width="1" height="1" alt="" style="display:none;" />`, trackingID)
+			convertedHTML += "\n" + openPixel
+
 			htmlBody = WrapEmailHTML(convertedHTML, renderedSubject)
+		}
+
+		// Check if channel is delayed by a workflow step (e.g. Email after 15m if unread)
+		var matchedStep *store.WorkflowStep
+		for _, st := range wf.Steps {
+			if st.Channel == ch && st.DelaySeconds > 0 {
+				matchedStep = &st
+				break
+			}
+		}
+
+		// If delayed or in quiet hours, schedule for later delivery
+		if matchedStep != nil || (inQuiet && !isUrgent && ch != store.ChannelInApp) {
+			scheduledTime := now.Add(time.Duration(15) * time.Minute)
+			condition := ""
+
+			if matchedStep != nil {
+				scheduledTime = now.Add(time.Duration(matchedStep.DelaySeconds) * time.Second)
+				condition = matchedStep.Condition
+			} else if inQuiet && !isUrgent {
+				scheduledTime = quietEnd
+			}
+
+			payloadBytes, _ := json.Marshal(req.Payload)
+			_ = we.store.CreateScheduledDelivery(&store.ScheduledDelivery{
+				NotificationID: notificationID,
+				WorkflowID:     wf.ID,
+				SubscriberID:   sub.ID,
+				Channel:        ch,
+				Subject:        renderedSubject,
+				Body:           strings.TrimSpace(renderedBody),
+				HTMLBody:       htmlBody,
+				ActionURL:      actionURL,
+				Payload:        string(payloadBytes),
+				ScheduledFor:   scheduledTime,
+				Condition:      condition,
+				Status:         "pending",
+			})
+
+			skipped[ch] = fmt.Sprintf("scheduled_for_%s", scheduledTime.Format(time.RFC3339))
+			continue
 		}
 
 		compiled := &CompiledMessage{
@@ -166,7 +238,8 @@ func (we *WorkflowEngine) PrepareDispatch(req *TriggerRequest) ([]*CompiledMessa
 			Body:       strings.TrimSpace(renderedBody),
 			HTMLBody:   htmlBody,
 			ActionURL:  actionURL,
-			Subscriber: &req.Subscriber,
+			TrackingID: trackingID,
+			Subscriber: sub,
 			WorkflowID: wf.ID,
 			Payload:    req.Payload,
 		}

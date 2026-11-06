@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,6 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("failed opening sqlite database: %w", err)
 	}
 
-	// SQLite handles concurrent reads with WAL, but single writer is safest
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
@@ -36,12 +36,10 @@ func NewStore(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close closes the database handle.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// DB returns the underlying database handle for advanced usage or testing.
 func (s *Store) DB() *sql.DB {
 	return s.db
 }
@@ -60,19 +58,25 @@ func (s *Store) CreateWorkflow(wf *Workflow) error {
 		return err
 	}
 
-	query := `INSERT INTO workflows (id, name, description, channels, created_at, updated_at) 
-	          VALUES (?, ?, ?, ?, ?, ?)`
-	_, err = s.db.Exec(query, wf.ID, wf.Name, wf.Description, string(channelsJSON), wf.CreatedAt, wf.UpdatedAt)
+	var stepsJSON sql.NullString
+	if len(wf.Steps) > 0 {
+		b, _ := json.Marshal(wf.Steps)
+		stepsJSON = sql.NullString{String: string(b), Valid: true}
+	}
+
+	query := `INSERT INTO workflows (id, name, description, channels, steps, digest_enabled, digest_window_seconds, digest_max_items, created_at, updated_at) 
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err = s.db.Exec(query, wf.ID, wf.Name, wf.Description, string(channelsJSON), stepsJSON, wf.DigestEnabled, wf.DigestWindowSeconds, wf.DigestMaxItems, wf.CreatedAt, wf.UpdatedAt)
 	return err
 }
 
 func (s *Store) GetWorkflow(id string) (*Workflow, error) {
-	query := `SELECT id, name, description, channels, created_at, updated_at FROM workflows WHERE id = ?`
+	query := `SELECT id, name, description, channels, steps, digest_enabled, digest_window_seconds, digest_max_items, created_at, updated_at FROM workflows WHERE id = ?`
 	row := s.db.QueryRow(query, id)
 
 	var wf Workflow
-	var channelsRaw string
-	err := row.Scan(&wf.ID, &wf.Name, &wf.Description, &channelsRaw, &wf.CreatedAt, &wf.UpdatedAt)
+	var channelsRaw, stepsRaw sql.NullString
+	err := row.Scan(&wf.ID, &wf.Name, &wf.Description, &channelsRaw, &stepsRaw, &wf.DigestEnabled, &wf.DigestWindowSeconds, &wf.DigestMaxItems, &wf.CreatedAt, &wf.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -80,14 +84,21 @@ func (s *Store) GetWorkflow(id string) (*Workflow, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal([]byte(channelsRaw), &wf.Channels); err != nil {
+	if channelsRaw.Valid && channelsRaw.String != "" {
+		_ = json.Unmarshal([]byte(channelsRaw.String), &wf.Channels)
+	} else {
 		wf.Channels = []string{}
 	}
+
+	if stepsRaw.Valid && stepsRaw.String != "" {
+		_ = json.Unmarshal([]byte(stepsRaw.String), &wf.Steps)
+	}
+
 	return &wf, nil
 }
 
 func (s *Store) ListWorkflows() ([]*Workflow, error) {
-	query := `SELECT id, name, description, channels, created_at, updated_at FROM workflows ORDER BY created_at ASC`
+	query := `SELECT id, name, description, channels, steps, digest_enabled, digest_window_seconds, digest_max_items, created_at, updated_at FROM workflows ORDER BY created_at ASC`
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -97,11 +108,16 @@ func (s *Store) ListWorkflows() ([]*Workflow, error) {
 	var list []*Workflow
 	for rows.Next() {
 		var wf Workflow
-		var channelsRaw string
-		if err := rows.Scan(&wf.ID, &wf.Name, &wf.Description, &channelsRaw, &wf.CreatedAt, &wf.UpdatedAt); err != nil {
+		var channelsRaw, stepsRaw sql.NullString
+		if err := rows.Scan(&wf.ID, &wf.Name, &wf.Description, &channelsRaw, &stepsRaw, &wf.DigestEnabled, &wf.DigestWindowSeconds, &wf.DigestMaxItems, &wf.CreatedAt, &wf.UpdatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal([]byte(channelsRaw), &wf.Channels)
+		if channelsRaw.Valid && channelsRaw.String != "" {
+			_ = json.Unmarshal([]byte(channelsRaw.String), &wf.Channels)
+		}
+		if stepsRaw.Valid && stepsRaw.String != "" {
+			_ = json.Unmarshal([]byte(stepsRaw.String), &wf.Steps)
+		}
 		list = append(list, &wf)
 	}
 	return list, rows.Err()
@@ -114,8 +130,14 @@ func (s *Store) UpdateWorkflow(wf *Workflow) error {
 		return err
 	}
 
-	query := `UPDATE workflows SET name = ?, description = ?, channels = ?, updated_at = ? WHERE id = ?`
-	res, err := s.db.Exec(query, wf.Name, wf.Description, string(channelsJSON), wf.UpdatedAt, wf.ID)
+	var stepsJSON sql.NullString
+	if len(wf.Steps) > 0 {
+		b, _ := json.Marshal(wf.Steps)
+		stepsJSON = sql.NullString{String: string(b), Valid: true}
+	}
+
+	query := `UPDATE workflows SET name = ?, description = ?, channels = ?, steps = ?, digest_enabled = ?, digest_window_seconds = ?, digest_max_items = ?, updated_at = ? WHERE id = ?`
+	res, err := s.db.Exec(query, wf.Name, wf.Description, string(channelsJSON), stepsJSON, wf.DigestEnabled, wf.DigestWindowSeconds, wf.DigestMaxItems, wf.UpdatedAt, wf.ID)
 	if err != nil {
 		return err
 	}
@@ -230,27 +252,31 @@ func (s *Store) UpsertSubscriber(sub *Subscriber) error {
 		webPushJSON = sql.NullString{String: string(b), Valid: true}
 	}
 
-	query := `INSERT INTO subscribers (id, email, telegram_chat_id, slack_webhook_url, web_push_subscription, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?)
+	query := `INSERT INTO subscribers (id, email, telegram_chat_id, slack_webhook_url, discord_webhook_url, web_push_subscription, timezone, quiet_hours_start, quiet_hours_end, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	          ON CONFLICT(id) DO UPDATE SET
 	              email = COALESCE(excluded.email, subscribers.email),
 	              telegram_chat_id = COALESCE(excluded.telegram_chat_id, subscribers.telegram_chat_id),
 	              slack_webhook_url = COALESCE(excluded.slack_webhook_url, subscribers.slack_webhook_url),
+	              discord_webhook_url = COALESCE(excluded.discord_webhook_url, subscribers.discord_webhook_url),
 	              web_push_subscription = COALESCE(excluded.web_push_subscription, subscribers.web_push_subscription),
+	              timezone = COALESCE(excluded.timezone, subscribers.timezone),
+	              quiet_hours_start = COALESCE(excluded.quiet_hours_start, subscribers.quiet_hours_start),
+	              quiet_hours_end = COALESCE(excluded.quiet_hours_end, subscribers.quiet_hours_end),
 	              updated_at = excluded.updated_at`
 
-	_, err := s.db.Exec(query, sub.ID, sub.Email, sub.TelegramChatID, sub.SlackWebhookURL, webPushJSON, now, now)
+	_, err := s.db.Exec(query, sub.ID, sub.Email, sub.TelegramChatID, sub.SlackWebhookURL, sub.DiscordWebhookURL, webPushJSON, sub.Timezone, sub.QuietHoursStart, sub.QuietHoursEnd, now, now)
 	return err
 }
 
 func (s *Store) GetSubscriber(id string) (*Subscriber, error) {
-	query := `SELECT id, email, telegram_chat_id, slack_webhook_url, web_push_subscription, created_at, updated_at 
+	query := `SELECT id, email, telegram_chat_id, slack_webhook_url, discord_webhook_url, web_push_subscription, timezone, quiet_hours_start, quiet_hours_end, created_at, updated_at 
 	          FROM subscribers WHERE id = ?`
 	row := s.db.QueryRow(query, id)
 
 	var sub Subscriber
-	var email, telegram, slack, pushSub sql.NullString
-	err := row.Scan(&sub.ID, &email, &telegram, &slack, &pushSub, &sub.CreatedAt, &sub.UpdatedAt)
+	var email, telegram, slack, discord, pushSub, tz, qStart, qEnd sql.NullString
+	err := row.Scan(&sub.ID, &email, &telegram, &slack, &discord, &pushSub, &tz, &qStart, &qEnd, &sub.CreatedAt, &sub.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -267,6 +293,18 @@ func (s *Store) GetSubscriber(id string) (*Subscriber, error) {
 	if slack.Valid {
 		sub.SlackWebhookURL = slack.String
 	}
+	if discord.Valid {
+		sub.DiscordWebhookURL = discord.String
+	}
+	if tz.Valid {
+		sub.Timezone = tz.String
+	}
+	if qStart.Valid {
+		sub.QuietHoursStart = qStart.String
+	}
+	if qEnd.Valid {
+		sub.QuietHoursEnd = qEnd.String
+	}
 	if pushSub.Valid && pushSub.String != "" {
 		var wps WebPushSubscription
 		if err := json.Unmarshal([]byte(pushSub.String), &wps); err == nil {
@@ -280,7 +318,7 @@ func (s *Store) ListSubscribers(limit, offset int) ([]*Subscriber, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	query := `SELECT id, email, telegram_chat_id, slack_webhook_url, web_push_subscription, created_at, updated_at 
+	query := `SELECT id, email, telegram_chat_id, slack_webhook_url, discord_webhook_url, web_push_subscription, timezone, quiet_hours_start, quiet_hours_end, created_at, updated_at 
 	          FROM subscribers ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 	rows, err := s.db.Query(query, limit, offset)
 	if err != nil {
@@ -291,8 +329,8 @@ func (s *Store) ListSubscribers(limit, offset int) ([]*Subscriber, error) {
 	var list []*Subscriber
 	for rows.Next() {
 		var sub Subscriber
-		var email, telegram, slack, pushSub sql.NullString
-		if err := rows.Scan(&sub.ID, &email, &telegram, &slack, &pushSub, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+		var email, telegram, slack, discord, pushSub, tz, qStart, qEnd sql.NullString
+		if err := rows.Scan(&sub.ID, &email, &telegram, &slack, &discord, &pushSub, &tz, &qStart, &qEnd, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if email.Valid {
@@ -303,6 +341,18 @@ func (s *Store) ListSubscribers(limit, offset int) ([]*Subscriber, error) {
 		}
 		if slack.Valid {
 			sub.SlackWebhookURL = slack.String
+		}
+		if discord.Valid {
+			sub.DiscordWebhookURL = discord.String
+		}
+		if tz.Valid {
+			sub.Timezone = tz.String
+		}
+		if qStart.Valid {
+			sub.QuietHoursStart = qStart.String
+		}
+		if qEnd.Valid {
+			sub.QuietHoursEnd = qEnd.String
 		}
 		if pushSub.Valid && pushSub.String != "" {
 			var wps WebPushSubscription
@@ -358,7 +408,6 @@ func (s *Store) IsChannelEnabled(subscriberID, channel string) (bool, error) {
 	err := row.Scan(&enabled)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			// By default, if no preference is explicitly set to false, it is enabled
 			return true, nil
 		}
 		return false, err
@@ -366,7 +415,7 @@ func (s *Store) IsChannelEnabled(subscriberID, channel string) (bool, error) {
 	return enabled, nil
 }
 
-// ==================== NOTIFICATIONS (IN-APP FEED) ====================
+// ==================== NOTIFICATIONS ====================
 
 func (s *Store) CreateNotification(n *Notification) error {
 	if n.ID == "" {
@@ -533,7 +582,7 @@ func (s *Store) DeleteNotification(id string) error {
 	return nil
 }
 
-// ==================== DELIVERY LOGS ====================
+// ==================== DELIVERY LOGS & TRACKING ====================
 
 func (s *Store) RecordDeliveryLog(log *DeliveryLog) error {
 	if log.ID == "" {
@@ -541,9 +590,45 @@ func (s *Store) RecordDeliveryLog(log *DeliveryLog) error {
 	}
 	log.DispatchedAt = time.Now().UTC()
 
-	query := `INSERT INTO delivery_logs (id, notification_id, workflow_id, subscriber_id, channel, status, error_message, payload, dispatched_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := s.db.Exec(query, log.ID, log.NotificationID, log.WorkflowID, log.SubscriberID, log.Channel, log.Status, log.ErrorMessage, log.Payload, log.DispatchedAt)
+	var trackingID, targetURL sql.NullString
+	if log.TrackingID != "" {
+		trackingID = sql.NullString{String: log.TrackingID, Valid: true}
+	}
+	if log.TargetURL != "" {
+		targetURL = sql.NullString{String: log.TargetURL, Valid: true}
+	}
+
+	query := `INSERT INTO delivery_logs (id, notification_id, workflow_id, subscriber_id, channel, status, error_message, payload, tracking_id, target_url, dispatched_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := s.db.Exec(query, log.ID, log.NotificationID, log.WorkflowID, log.SubscriberID, log.Channel, log.Status, log.ErrorMessage, log.Payload, trackingID, targetURL, log.DispatchedAt)
+	return err
+}
+
+func (s *Store) RecordTrackingClick(trackingID string) (string, error) {
+	now := time.Now().UTC()
+	query := `UPDATE delivery_logs SET clicked_at = COALESCE(clicked_at, ?) WHERE tracking_id = ?`
+	_, err := s.db.Exec(query, now, trackingID)
+	if err != nil {
+		return "", err
+	}
+
+	var targetURL sql.NullString
+	querySelect := `SELECT target_url FROM delivery_logs WHERE tracking_id = ?`
+	err = s.db.QueryRow(querySelect, trackingID).Scan(&targetURL)
+	if err != nil {
+		return "", err
+	}
+
+	if targetURL.Valid {
+		return targetURL.String, nil
+	}
+	return "/", nil
+}
+
+func (s *Store) RecordTrackingOpen(trackingID string) error {
+	now := time.Now().UTC()
+	query := `UPDATE delivery_logs SET opened_at = COALESCE(opened_at, ?) WHERE tracking_id = ?`
+	_, err := s.db.Exec(query, now, trackingID)
 	return err
 }
 
@@ -552,7 +637,7 @@ func (s *Store) ListDeliveryLogs(limit, offset int, filterChannel, filterStatus 
 		limit = 50
 	}
 
-	query := `SELECT id, notification_id, workflow_id, subscriber_id, channel, status, error_message, payload, dispatched_at 
+	query := `SELECT id, notification_id, workflow_id, subscriber_id, channel, status, error_message, payload, tracking_id, target_url, opened_at, clicked_at, dispatched_at 
 	          FROM delivery_logs WHERE 1=1`
 	var args []any
 
@@ -577,8 +662,10 @@ func (s *Store) ListDeliveryLogs(limit, offset int, filterChannel, filterStatus 
 	var list []*DeliveryLog
 	for rows.Next() {
 		var l DeliveryLog
-		var notifID, errMsg, payload sql.NullString
-		if err := rows.Scan(&l.ID, &notifID, &l.WorkflowID, &l.SubscriberID, &l.Channel, &l.Status, &errMsg, &payload, &l.DispatchedAt); err != nil {
+		var notifID, errMsg, payload, trackingID, targetURL sql.NullString
+		var openedAt, clickedAt sql.NullTime
+
+		if err := rows.Scan(&l.ID, &notifID, &l.WorkflowID, &l.SubscriberID, &l.Channel, &l.Status, &errMsg, &payload, &trackingID, &targetURL, &openedAt, &clickedAt, &l.DispatchedAt); err != nil {
 			return nil, err
 		}
 		if notifID.Valid {
@@ -590,9 +677,210 @@ func (s *Store) ListDeliveryLogs(limit, offset int, filterChannel, filterStatus 
 		if payload.Valid {
 			l.Payload = payload.String
 		}
+		if trackingID.Valid {
+			l.TrackingID = trackingID.String
+		}
+		if targetURL.Valid {
+			l.TargetURL = targetURL.String
+		}
+		if openedAt.Valid {
+			l.OpenedAt = &openedAt.Time
+		}
+		if clickedAt.Valid {
+			l.ClickedAt = &clickedAt.Time
+		}
 		list = append(list, &l)
 	}
 	return list, rows.Err()
+}
+
+// ==================== SCHEDULED DELIVERIES & RETRIES ====================
+
+func (s *Store) CreateScheduledDelivery(sd *ScheduledDelivery) error {
+	if sd.ID == "" {
+		sd.ID = uuid.NewString()
+	}
+	sd.CreatedAt = time.Now().UTC()
+	if sd.Status == "" {
+		sd.Status = "pending"
+	}
+	if sd.MaxAttempts <= 0 {
+		sd.MaxAttempts = 3
+	}
+
+	query := `INSERT INTO scheduled_deliveries (id, notification_id, workflow_id, subscriber_id, channel, subject, body, html_body, action_url, payload, scheduled_for, attempts, max_attempts, condition, status, created_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := s.db.Exec(query, sd.ID, sd.NotificationID, sd.WorkflowID, sd.SubscriberID, sd.Channel, sd.Subject, sd.Body, sd.HTMLBody, sd.ActionURL, sd.Payload, sd.ScheduledFor, sd.Attempts, sd.MaxAttempts, sd.Condition, sd.Status, sd.CreatedAt)
+	return err
+}
+
+func (s *Store) ListPendingScheduledDeliveries(before time.Time, limit int) ([]*ScheduledDelivery, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `SELECT id, notification_id, workflow_id, subscriber_id, channel, subject, body, html_body, action_url, payload, scheduled_for, attempts, max_attempts, condition, status, created_at 
+	          FROM scheduled_deliveries 
+	          WHERE status = 'pending' AND scheduled_for <= ? 
+	          ORDER BY scheduled_for ASC LIMIT ?`
+	rows, err := s.db.Query(query, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*ScheduledDelivery
+	for rows.Next() {
+		var sd ScheduledDelivery
+		var notifID, htmlBody, actionURL, payload, condition sql.NullString
+		if err := rows.Scan(&sd.ID, &notifID, &sd.WorkflowID, &sd.SubscriberID, &sd.Channel, &sd.Subject, &sd.Body, &htmlBody, &actionURL, &payload, &sd.ScheduledFor, &sd.Attempts, &sd.MaxAttempts, &condition, &sd.Status, &sd.CreatedAt); err != nil {
+			return nil, err
+		}
+		if notifID.Valid {
+			sd.NotificationID = notifID.String
+		}
+		if htmlBody.Valid {
+			sd.HTMLBody = htmlBody.String
+		}
+		if actionURL.Valid {
+			sd.ActionURL = actionURL.String
+		}
+		if payload.Valid {
+			sd.Payload = payload.String
+		}
+		if condition.Valid {
+			sd.Condition = condition.String
+		}
+		list = append(list, &sd)
+	}
+	return list, rows.Err()
+}
+
+func (s *Store) UpdateScheduledDeliveryStatus(id, status, errorMsg string, attempts int) error {
+	query := `UPDATE scheduled_deliveries SET status = ?, attempts = ? WHERE id = ?`
+	_, err := s.db.Exec(query, status, attempts, id)
+	return err
+}
+
+func (s *Store) DeleteScheduledDelivery(id string) error {
+	query := `DELETE FROM scheduled_deliveries WHERE id = ?`
+	_, err := s.db.Exec(query, id)
+	return err
+}
+
+// ==================== DIGEST ENTRIES ====================
+
+func (s *Store) AddDigestEntry(entry *DigestEntry) error {
+	if entry.ID == "" {
+		entry.ID = uuid.NewString()
+	}
+	entry.CreatedAt = time.Now().UTC()
+
+	query := `INSERT INTO digest_entries (id, workflow_id, subscriber_id, payload, created_at)
+	          VALUES (?, ?, ?, ?, ?)`
+	_, err := s.db.Exec(query, entry.ID, entry.WorkflowID, entry.SubscriberID, entry.Payload, entry.CreatedAt)
+	return err
+}
+
+func (s *Store) GetDigestEntries(workflowID, subscriberID string) ([]*DigestEntry, error) {
+	query := `SELECT id, workflow_id, subscriber_id, payload, created_at 
+	          FROM digest_entries WHERE workflow_id = ? AND subscriber_id = ? ORDER BY created_at ASC`
+	rows, err := s.db.Query(query, workflowID, subscriberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*DigestEntry
+	for rows.Next() {
+		var de DigestEntry
+		if err := rows.Scan(&de.ID, &de.WorkflowID, &de.SubscriberID, &de.Payload, &de.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, &de)
+	}
+	return list, rows.Err()
+}
+
+func (s *Store) ClearDigestEntries(workflowID, subscriberID string) error {
+	query := `DELETE FROM digest_entries WHERE workflow_id = ? AND subscriber_id = ?`
+	_, err := s.db.Exec(query, workflowID, subscriberID)
+	return err
+}
+
+func (s *Store) CountDigestEntries(workflowID, subscriberID string) (int, error) {
+	query := `SELECT COUNT(*) FROM digest_entries WHERE workflow_id = ? AND subscriber_id = ?`
+	var count int
+	err := s.db.QueryRow(query, workflowID, subscriberID).Scan(&count)
+	return count, err
+}
+
+func (s *Store) ListPendingDigestSubscribers() ([]struct{ WorkflowID, SubscriberID string }, error) {
+	query := `SELECT DISTINCT workflow_id, subscriber_id FROM digest_entries`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []struct{ WorkflowID, SubscriberID string }
+	for rows.Next() {
+		var item struct{ WorkflowID, SubscriberID string }
+		if err := rows.Scan(&item.WorkflowID, &item.SubscriberID); err != nil {
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	return list, rows.Err()
+}
+
+// ==================== API KEYS (WORKSPACES) ====================
+
+func (s *Store) CreateAPIKey(name string) (string, error) {
+	key := "nf_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	now := time.Now().UTC()
+	query := `INSERT INTO api_keys (key, name, created_at) VALUES (?, ?, ?)`
+	_, err := s.db.Exec(query, key, name, now)
+	return key, err
+}
+
+func (s *Store) ListAPIKeys() ([]*APIKeyRecord, error) {
+	query := `SELECT key, name, created_at FROM api_keys ORDER BY created_at DESC`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*APIKeyRecord
+	for rows.Next() {
+		var rec APIKeyRecord
+		if err := rows.Scan(&rec.Key, &rec.Name, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, &rec)
+	}
+	return list, rows.Err()
+}
+
+func (s *Store) DeleteAPIKey(key string) error {
+	query := `DELETE FROM api_keys WHERE key = ?`
+	_, err := s.db.Exec(query, key)
+	return err
+}
+
+func (s *Store) ValidateAPIKey(key string) (bool, error) {
+	query := `SELECT COUNT(*) FROM api_keys WHERE key = ?`
+	var count int
+	err := s.db.QueryRow(query, key).Scan(&count)
+	return count > 0, err
+}
+
+// ==================== ONLINE HOT BACKUP ====================
+
+func (s *Store) HotBackup(destPath string) error {
+	query := fmt.Sprintf("VACUUM INTO '%s'", destPath)
+	_, err := s.db.Exec(query)
+	return err
 }
 
 // ==================== IDEMPOTENCY KEYS ====================

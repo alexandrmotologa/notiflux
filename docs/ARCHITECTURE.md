@@ -98,3 +98,23 @@ The single binary serves:
 - Real-time SSE stream at `/v1/feed/stream`
 - Client widget library at `/widget/notiflux-bell.js` and `/widget/notiflux-bell.css`
 - Administration cockpit at `/studio` (and `/`)
+
+---
+
+## Background Scheduler Engine
+
+Notiflux includes a zero-dependency internal scheduler loop running on a ticker:
+
+1. **Step Delays with Unread Fallback**: Workflows can define multi-step pipelines (e.g. deliver in-app notification immediately, then dispatch an email 15 minutes later only if the in-app notification remains unread).
+2. **Digest Aggregation**: High-frequency events (e.g. comments, mentions, build updates) are buffered in SQLite and flushed in batches using customizable time windows or batch thresholds.
+3. **Quiet Hours Evaluation**: When quiet hours are defined for a subscriber's timezone, notifications to disruptive channels (email, push, messaging) are paused and automatically scheduled for delivery when the recipient's quiet window closes, while urgent alerts bypass this restriction.
+4. **Retry Loop with Exponential Backoff**: Failed delivery attempts to external network providers are placed in a persistent retry queue with attempt counters and backoff intervals.
+
+---
+
+## Engagement Tracking Architecture
+
+Notiflux tracks notification engagement without external telemetry dependencies:
+- **Email Open Tracking**: An invisible 1x1 transparent PNG pixel (`/v1/o/:tracking_id.png`) is embedded into outbound email templates. When requested by an email client, the delivery log is updated with an `opened_at` timestamp.
+- **Link Click Tracking**: Action URLs are routed through `/v1/r/:tracking_id`. The server updates the `clicked_at` timestamp in SQLite and issues an immediate HTTP 302 redirect to the destination URL.
+

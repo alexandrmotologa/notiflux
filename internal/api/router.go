@@ -56,6 +56,8 @@ func NewRouter(rc *RouterConfig) *chi.Mux {
 	wfHandler := NewWorkflowHandler(rc.Store)
 	logsHandler := NewLogsHandler(rc.Store)
 	systemHandler := NewSystemHandler(rc.Config, rc.SSEHub, rc.Pool)
+	trackingHandler := NewTrackingHandler(rc.Store)
+	keyBackupHandler := NewKeyAndBackupHandler(rc.Store)
 
 	// Mount public widget routes
 	widget.MountWidgetRoutes(r)
@@ -67,6 +69,10 @@ func NewRouter(rc *RouterConfig) *chi.Mux {
 	r.Route("/v1", func(r chi.Router) {
 		// Public health check
 		r.Get("/health", systemHandler.Health)
+
+		// Public tracking routes (clicks and email open pixels)
+		r.Get("/r/{tracking_id}", trackingHandler.TrackClick)
+		r.Get("/o/{tracking_id}", trackingHandler.TrackOpen)
 
 		// Public client feed & SSE routes
 		r.Route("/feed", func(r chi.Router) {
@@ -80,7 +86,7 @@ func NewRouter(rc *RouterConfig) *chi.Mux {
 
 		// Protected administrative & ingestion routes
 		r.Group(func(r chi.Router) {
-			r.Use(AuthMiddleware(rc.Config.APIKey))
+			r.Use(AuthMiddleware(rc.Config.APIKey, rc.Store))
 
 			// Triggers
 			r.Post("/trigger", triggerHandler.Trigger)
@@ -105,38 +111,48 @@ func NewRouter(rc *RouterConfig) *chi.Mux {
 			r.Get("/subscribers", logsHandler.ListSubscribers)
 			r.Get("/subscribers/{id}", logsHandler.GetSubscriber)
 
-			// System Utilities
+			// System Utilities & Workspaces
 			r.Post("/system/vapid", systemHandler.GenerateVAPID)
 			r.Post("/system/test-channel", systemHandler.TestChannel)
+			r.Get("/system/keys", keyBackupHandler.ListKeys)
+			r.Post("/system/keys", keyBackupHandler.CreateKey)
+			r.Delete("/system/keys/{key}", keyBackupHandler.DeleteKey)
+			r.Post("/system/backup", keyBackupHandler.TriggerBackup)
 		})
 	})
 
 	return r
 }
 
-// AuthMiddleware validates API keys when configured.
-func AuthMiddleware(apiKey string) func(http.Handler) http.Handler {
+// AuthMiddleware validates master API key or workspace API keys.
+func AuthMiddleware(masterKey string, st *store.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if apiKey == "" {
+			token := ""
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+			} else if hKey := r.Header.Get("X-API-Key"); hKey != "" {
+				token = hKey
+			}
+
+			// If no master key is set and no workspace key exists, allow open access
+			if masterKey == "" && token == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			// Check Bearer token
-			authHeader := r.Header.Get("Authorization")
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				token := strings.TrimPrefix(authHeader, "Bearer ")
-				if token == apiKey {
+			if masterKey != "" && token == masterKey {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check workspace keys in store
+			if token != "" && st != nil {
+				if valid, _ := st.ValidateAPIKey(token); valid {
 					next.ServeHTTP(w, r)
 					return
 				}
-			}
-
-			// Check X-API-Key header
-			if r.Header.Get("X-API-Key") == apiKey {
-				next.ServeHTTP(w, r)
-				return
 			}
 
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: valid API key required"})

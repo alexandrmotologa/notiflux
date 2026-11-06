@@ -293,3 +293,131 @@ func TestAPI_WidgetServing(t *testing.T) {
 		t.Errorf("expected widget script content, got %s", rec.Body.String()[:100])
 	}
 }
+
+func TestAPI_TrackingEndpoints(t *testing.T) {
+	ctx, cleanup := setupTestRouter(t, "")
+	defer cleanup()
+
+	// Seed subscriber and delivery log with tracking ID
+	_ = ctx.store.UpsertSubscriber(&store.Subscriber{ID: "usr_trk_test", Email: "trk@example.com"})
+	logRecord := &store.DeliveryLog{
+		ID:           "dl_trk_1",
+		WorkflowID:   "order.shipped",
+		SubscriberID: "usr_trk_test",
+		Channel:      store.ChannelEmail,
+		Status:       store.StatusSent,
+		TrackingID:   "trk_test_token_88",
+		TargetURL:    "https://example.com/orders/track-88",
+	}
+	_ = ctx.store.RecordDeliveryLog(logRecord)
+
+	// 1. Test Open Pixel: GET /v1/o/trk_test_token_88.png
+	reqPixel := httptest.NewRequest(http.MethodGet, "/v1/o/trk_test_token_88.png", nil)
+	recPixel := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recPixel, reqPixel)
+
+	if recPixel.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for tracking pixel, got %d", recPixel.Code)
+	}
+	if recPixel.Header().Get("Content-Type") != "image/png" {
+		t.Errorf("expected image/png content type, got %s", recPixel.Header().Get("Content-Type"))
+	}
+
+	// Verify opened_at is recorded
+	logs, err := ctx.store.ListDeliveryLogs(10, 0, "", "")
+	if err != nil || len(logs) == 0 {
+		t.Fatalf("failed listing logs: %v", err)
+	}
+	if logs[0].OpenedAt == nil {
+		t.Errorf("expected OpenedAt to be populated in database")
+	}
+
+	// 2. Test Click Redirect: GET /v1/r/trk_test_token_88
+	reqRedirect := httptest.NewRequest(http.MethodGet, "/v1/r/trk_test_token_88", nil)
+	recRedirect := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recRedirect, reqRedirect)
+
+	if recRedirect.Code != http.StatusFound {
+		t.Fatalf("expected 302 Found for redirect, got %d", recRedirect.Code)
+	}
+	if recRedirect.Header().Get("Location") != "https://example.com/orders/track-88" {
+		t.Errorf("expected redirect location https://example.com/orders/track-88, got %s", recRedirect.Header().Get("Location"))
+	}
+
+	// Verify clicked_at is recorded
+	logs, _ = ctx.store.ListDeliveryLogs(10, 0, "", "")
+	if logs[0].ClickedAt == nil {
+		t.Errorf("expected ClickedAt to be populated in database")
+	}
+}
+
+func TestAPI_MultiAPIKeysAndHotBackup(t *testing.T) {
+	ctx, cleanup := setupTestRouter(t, "root-master-key")
+	defer cleanup()
+
+	// 1. Create a workspace key
+	keyPayload := map[string]string{"name": "Billing Service Key"}
+	b, _ := json.Marshal(keyPayload)
+	reqCreate := httptest.NewRequest(http.MethodPost, "/v1/system/keys", bytes.NewReader(b))
+	reqCreate.Header.Set("Authorization", "Bearer root-master-key")
+	recCreate := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recCreate, reqCreate)
+
+	if recCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for API key, got %d (body: %s)", recCreate.Code, recCreate.Body.String())
+	}
+
+	var createdResp map[string]string
+	_ = json.Unmarshal(recCreate.Body.Bytes(), &createdResp)
+	newKey := createdResp["key"]
+	if !strings.HasPrefix(newKey, "nf_") {
+		t.Errorf("expected key to start with nf_, got %s", newKey)
+	}
+
+	// 2. List keys
+	reqList := httptest.NewRequest(http.MethodGet, "/v1/system/keys", nil)
+	reqList.Header.Set("Authorization", "Bearer root-master-key")
+	recList := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recList, reqList)
+
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for list keys, got %d", recList.Code)
+	}
+
+	// 3. Authenticate with newly generated workspace key
+	reqAuth := httptest.NewRequest(http.MethodGet, "/v1/workflows", nil)
+	reqAuth.Header.Set("Authorization", "Bearer "+newKey)
+	recAuth := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recAuth, reqAuth)
+
+	if recAuth.Code != http.StatusOK {
+		t.Errorf("expected 200 OK using workspace key, got %d", recAuth.Code)
+	}
+
+	// 4. Test Hot Backup: POST /v1/system/backup
+	reqBackup := httptest.NewRequest(http.MethodPost, "/v1/system/backup", nil)
+	reqBackup.Header.Set("Authorization", "Bearer root-master-key")
+	recBackup := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recBackup, reqBackup)
+
+	if recBackup.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for hot backup, got %d (body: %s)", recBackup.Code, recBackup.Body.String())
+	}
+
+	var backupResp map[string]any
+	_ = json.Unmarshal(recBackup.Body.Bytes(), &backupResp)
+	if backupResp["success"] != true || backupResp["backup_file"] == nil {
+		t.Errorf("unexpected hot backup response: %v", backupResp)
+	}
+
+	// 5. Delete workspace key
+	reqDel := httptest.NewRequest(http.MethodDelete, "/v1/system/keys/"+newKey, nil)
+	reqDel.Header.Set("Authorization", "Bearer root-master-key")
+	recDel := httptest.NewRecorder()
+	ctx.router.ServeHTTP(recDel, reqDel)
+
+	if recDel.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for key deletion, got %d", recDel.Code)
+	}
+}
+

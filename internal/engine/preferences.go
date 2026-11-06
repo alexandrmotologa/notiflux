@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/alexandrmotologa/notiflux/internal/store"
 )
 
@@ -60,6 +63,11 @@ func (pe *PreferenceEvaluator) FilterActiveChannels(
 				skippedReasons[ch] = "missing_slack_webhook_url"
 				continue
 			}
+		case store.ChannelDiscord:
+			if sub.DiscordWebhookURL == "" {
+				skippedReasons[ch] = "missing_discord_webhook_url"
+				continue
+			}
 		case store.ChannelWebPush:
 			if sub.WebPushSubscription == nil || sub.WebPushSubscription.Endpoint == "" {
 				skippedReasons[ch] = "missing_web_push_subscription"
@@ -73,4 +81,63 @@ func (pe *PreferenceEvaluator) FilterActiveChannels(
 	}
 
 	return activeChannels, skippedReasons, nil
+}
+
+// IsInQuietHours checks if the subscriber has quiet hours active at the given time.
+// If active, it returns true and the time when the quiet window ends.
+func IsInQuietHours(sub *store.Subscriber, now time.Time) (bool, time.Time) {
+	if sub == nil || sub.QuietHoursStart == "" || sub.QuietHoursEnd == "" {
+		return false, time.Time{}
+	}
+
+	loc := time.UTC
+	if sub.Timezone != "" {
+		if l, err := time.LoadLocation(sub.Timezone); err == nil {
+			loc = l
+		}
+	}
+
+	localNow := now.In(loc)
+	startH, startM, err1 := parseHourMinute(sub.QuietHoursStart)
+	endH, endM, err2 := parseHourMinute(sub.QuietHoursEnd)
+	if err1 != nil || err2 != nil {
+		return false, time.Time{}
+	}
+
+	currentMinutes := localNow.Hour()*60 + localNow.Minute()
+	startMinutes := startH*60 + startM
+	endMinutes := endH*60 + endM
+
+	inQuiet := false
+	var endYear, endMonth, endDay int
+	endYear, endMonth, endDay = localNow.Year(), int(localNow.Month()), localNow.Day()
+
+	if startMinutes < endMinutes {
+		// e.g. 01:00 to 06:00
+		inQuiet = currentMinutes >= startMinutes && currentMinutes < endMinutes
+	} else {
+		// e.g. 22:00 to 08:00 (spans midnight)
+		inQuiet = currentMinutes >= startMinutes || currentMinutes < endMinutes
+		if currentMinutes >= startMinutes {
+			// Quiet hours end next day
+			nextDay := localNow.AddDate(0, 0, 1)
+			endYear, endMonth, endDay = nextDay.Year(), int(nextDay.Month()), nextDay.Day()
+		}
+	}
+
+	if inQuiet {
+		endTime := time.Date(endYear, time.Month(endMonth), endDay, endH, endM, 0, 0, loc).UTC()
+		return true, endTime
+	}
+
+	return false, time.Time{}
+}
+
+func parseHourMinute(s string) (int, int, error) {
+	var h, m int
+	n, err := fmt.Sscanf(s, "%d:%d", &h, &m)
+	if err != nil || n != 2 || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, fmt.Errorf("invalid time format %q, expected HH:MM", s)
+	}
+	return h, m, nil
 }

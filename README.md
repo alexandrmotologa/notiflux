@@ -8,11 +8,13 @@ Notiflux provides a single-binary alternative to Novu, Knock, and Courier. It ru
 
 - Single static Go binary with zero CGO dependencies.
 - Sub-45MB RAM consumption under 10,000 active Server-Sent Events subscribers.
-- Multi-channel delivery across In-App, Email (SMTP and Resend API), Web Push (RFC 8292 VAPID), Telegram Bot API, Slack Webhooks, and outbound HTTPS Webhooks.
-- Real-time client widget (< 3KB) available as both a Vanilla Web Component (`<notiflux-bell>`) and a React 19 component (`<NotificationBell />`).
+- Multi-channel delivery across In-App, Email (SMTP and Resend API), Web Push (RFC 8292 VAPID), Telegram Bot API, Slack Webhooks, Discord Webhooks, and outbound HTTPS Webhooks.
+- Real-time client widget (< 3KB) available as both a Vanilla Web Component (`<notiflux-bell>`) and a React 19 component (`<NotificationBell />`) with Web Audio chime and native desktop push prompt.
 - Embedded management studio written in React 19 and Tailwind CSS, served directly from the binary.
 - Built-in idempotency key engine to prevent duplicate notification deliveries.
-- User preference management with per-channel opt-out and quiet-hours handling.
+- User preference management with per-channel opt-out, timezone-aware quiet hours, step delays with unread fallback, and digest aggregation.
+- Real-time engagement tracking with 1x1 open pixel and instant redirect click tracking.
+- Online hot backup via SQLite VACUUM INTO with zero downtime.
 
 ---
 
@@ -195,6 +197,14 @@ Output:
 VAPID Public Key:  BNcRdreALRFXTkOOUHK1T9S...
 VAPID Private Key: MC4CAQAwBQYDK2VwBCIEI...
 ```
+
+### Online Hot Database Backup
+To create a point-in-time SQLite snapshot while the server is actively serving traffic:
+
+```bash
+notiflux backup --db notiflux.db --out /var/backups/notiflux_daily.db
+```
+
 
 ---
 

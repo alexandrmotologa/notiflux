@@ -282,3 +282,16 @@ The client widget and SSE stream use scoped public tokens or direct recipient qu
 - [x] 9.2: Verify RAM usage remains below 45MB during idle and under active load.
 - [x] 9.3: Create comprehensive README.md following humanizer guidelines (no em dashes, factual, no AI clichés).
 - [x] 9.4: Provide Dockerfile and Docker Compose configurations for production deployment.
+
+### Task 10: Advanced Engine Features & Production Hardening
+- [x] 10.1: Discord Webhooks Dispatcher with rich embed schemas, colors, and timestamps.
+- [x] 10.2: Background Scheduler Loop (`internal/engine/scheduler.go`) evaluating step delays, quiet hours, retries, and digest flushing.
+- [x] 10.3: Step Delays with Unread Fallback (`condition: "if_unread"`, `delay_seconds: 900`).
+- [x] 10.4: Digest Aggregation buffering high-frequency events and delivering consolidated batch updates.
+- [x] 10.5: Quiet Hours and Timezone evaluation postponing disruptive dispatches to morning release while allowing urgent bypass.
+- [x] 10.6: Open and Click Engagement Tracking with 1x1 transparent PNG pixel injection and HTTP 302 click redirects.
+- [x] 10.7: Online Hot SQLite Backups via SQLite VACUUM INTO and CLI subcommand `notiflux backup`.
+- [x] 10.8: Scoped Workspace API Keys management with multi-key database validation and header authentication.
+- [x] 10.9: Client Widget synthetic Web Audio chime and native desktop Web Push permission prompts.
+- [x] 10.10: Integration Code Snippets generator in Admin Studio for cURL, Node.js, Python, Go, and PHP.
+

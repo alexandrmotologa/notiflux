@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { ScrollText, RefreshCw, CheckCircle2, XCircle, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ScrollText,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  MousePointerClick,
+  Clock,
+} from "lucide-react";
 import type { DeliveryLog } from "../types";
 import { fetchLogs } from "../api";
 
@@ -31,7 +42,9 @@ export const DeliveryLogsView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">Delivery Logs</h1>
-          <p className="text-sm text-gray-400">Chronological history of notification dispatch attempts across all channels</p>
+          <p className="text-sm text-gray-400">
+            Chronological history of notification dispatch attempts across all channels
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -46,6 +59,7 @@ export const DeliveryLogsView: React.FC = () => {
             <option value="web_push">Web Push</option>
             <option value="telegram">Telegram</option>
             <option value="slack">Slack</option>
+            <option value="discord">Discord</option>
             <option value="webhook">Webhook</option>
           </select>
 
@@ -58,6 +72,7 @@ export const DeliveryLogsView: React.FC = () => {
             <option value="sent">Sent</option>
             <option value="failed">Failed</option>
             <option value="skipped">Skipped</option>
+            <option value="scheduled">Scheduled</option>
           </select>
 
           <button
@@ -87,6 +102,7 @@ export const DeliveryLogsView: React.FC = () => {
                   <th className="py-3 px-4">Workflow</th>
                   <th className="py-3 px-4">Subscriber</th>
                   <th className="py-3 px-4">Channel</th>
+                  <th className="py-3 px-4">Engagement</th>
                   <th className="py-3 px-4">Dispatched At</th>
                 </tr>
               </thead>
@@ -115,6 +131,10 @@ export const DeliveryLogsView: React.FC = () => {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
                               <XCircle className="w-3 h-3" /> Failed
                             </span>
+                          ) : log.status === "scheduled" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              <Clock className="w-3 h-3" /> Scheduled
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                               <AlertCircle className="w-3 h-3" /> Skipped
@@ -132,6 +152,28 @@ export const DeliveryLogsView: React.FC = () => {
                             {log.channel}
                           </span>
                         </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            {log.opened_at ? (
+                              <span
+                                title={`Opened at ${new Date(log.opened_at).toLocaleTimeString()}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[10px] font-mono"
+                              >
+                                <Eye className="w-3 h-3" /> Open
+                              </span>
+                            ) : (
+                              <span className="text-gray-600 text-[10px] font-mono">-</span>
+                            )}
+                            {log.clicked_at ? (
+                              <span
+                                title={`Clicked at ${new Date(log.clicked_at).toLocaleTimeString()}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono"
+                              >
+                                <MousePointerClick className="w-3 h-3" /> Click
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="py-3 px-4 font-mono text-gray-400">
                           {new Date(log.dispatched_at).toLocaleString()}
                         </td>
@@ -139,10 +181,37 @@ export const DeliveryLogsView: React.FC = () => {
 
                       {isExpanded && (
                         <tr className="bg-[#0b0f17]">
-                          <td colSpan={6} className="p-4 space-y-3 border-b border-[#243247]">
+                          <td colSpan={7} className="p-4 space-y-3 border-b border-[#243247]">
                             {log.error_message && (
                               <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-3 rounded-lg text-xs font-mono">
                                 <strong>Error:</strong> {log.error_message}
+                              </div>
+                            )}
+
+                            {log.tracking_id && (
+                              <div className="bg-[#182234] border border-[#243247] rounded-lg p-2.5 text-xs text-gray-400 space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Tracking Token:</span>
+                                  <span className="font-mono text-indigo-300">{log.tracking_id}</span>
+                                </div>
+                                {log.target_url && (
+                                  <div className="flex justify-between">
+                                    <span>Target Redirect:</span>
+                                    <span className="font-mono text-gray-300 truncate max-w-md">{log.target_url}</span>
+                                  </div>
+                                )}
+                                {log.opened_at && (
+                                  <div className="flex justify-between">
+                                    <span>Opened At:</span>
+                                    <span className="font-mono text-emerald-400">{new Date(log.opened_at).toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {log.clicked_at && (
+                                  <div className="flex justify-between">
+                                    <span>Clicked At:</span>
+                                    <span className="font-mono text-amber-400">{new Date(log.clicked_at).toLocaleString()}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
 

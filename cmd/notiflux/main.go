@@ -31,6 +31,9 @@ func main() {
 		case "vapid", "generate-vapid":
 			runVAPID()
 			return
+		case "backup":
+			runBackup(args[1:])
+			return
 		case "help", "--help", "-h":
 			printUsage()
 			return
@@ -90,6 +93,35 @@ func runVAPID() {
 	fmt.Printf("export NOTIFLUX_VAPID_SUBJECT=\"mailto:admin@yourdomain.com\"\n")
 }
 
+func runBackup(args []string) {
+	outPath := fmt.Sprintf("notiflux_backup_%d.db", time.Now().Unix())
+	dbPath := "notiflux.db"
+
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "--out" || args[i] == "-o") && i+1 < len(args) {
+			outPath = args[i+1]
+			i++
+		} else if (args[i] == "--db" || args[i] == "-d") && i+1 < len(args) {
+			dbPath = args[i+1]
+			i++
+		}
+	}
+
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed opening database for backup: %v\n", err)
+		os.Exit(1)
+	}
+	defer st.Close()
+
+	if err := st.HotBackup(outPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Online backup failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Online hot backup completed successfully: %s\n", outPath)
+}
+
 func runServe(args []string) {
 	cfg, err := config.LoadConfig(args)
 	if err != nil {
@@ -111,6 +143,11 @@ func runServe(args []string) {
 	pool := channels.NewDispatcherPool(cfg, st, hub)
 	eng := engine.NewWorkflowEngine(st)
 	idem := engine.NewIdempotencyEngine(st)
+
+	// Background scheduler for delayed steps, retries, quiet hours, and digests
+	scheduler := engine.NewScheduler(st, pool)
+	scheduler.Start()
+	defer scheduler.Stop()
 
 	routerConfig := &api.RouterConfig{
 		Config:      cfg,

@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Users, Mail, Send, Smartphone, MessageSquare, Bell, Check, X, RefreshCw } from "lucide-react";
+import {
+  Users,
+  Mail,
+  Send,
+  Smartphone,
+  MessageSquare,
+  Bell,
+  Check,
+  X,
+  RefreshCw,
+  Moon,
+  Globe,
+  Radio,
+} from "lucide-react";
 import type { Subscriber } from "../types";
 import { fetchSubscribers, fetchSubscriber, updateSubscriberPreferences } from "../api";
 
@@ -64,7 +77,9 @@ export const SubscribersView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">Subscribers</h1>
-          <p className="text-sm text-gray-400">Recipient profiles, credential registry, and notification channel opt-ins</p>
+          <p className="text-sm text-gray-400">
+            Recipient profiles, credential registry, quiet hours, and notification channel opt-ins
+          </p>
         </div>
         <button
           onClick={load}
@@ -112,10 +127,31 @@ export const SubscribersView: React.FC = () => {
                           {sub.email || "-"}
                         </td>
                         <td className="py-3 px-4 flex items-center gap-1.5 text-gray-400">
-                          {sub.email && <span title="Email registered"><Mail className="w-3.5 h-3.5 text-indigo-400" /></span>}
-                          {sub.telegram_chat_id && <span title="Telegram registered"><Send className="w-3.5 h-3.5 text-sky-400" /></span>}
-                          {sub.web_push_subscription && <span title="Web Push registered"><Smartphone className="w-3.5 h-3.5 text-emerald-400" /></span>}
-                          {sub.slack_webhook_url && <span title="Slack registered"><MessageSquare className="w-3.5 h-3.5 text-amber-400" /></span>}
+                          {sub.email && (
+                            <span title="Email registered">
+                              <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                            </span>
+                          )}
+                          {sub.telegram_chat_id && (
+                            <span title="Telegram registered">
+                              <Send className="w-3.5 h-3.5 text-sky-400" />
+                            </span>
+                          )}
+                          {sub.web_push_subscription && (
+                            <span title="Web Push registered">
+                              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                            </span>
+                          )}
+                          {sub.slack_webhook_url && (
+                            <span title="Slack registered">
+                              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                            </span>
+                          )}
+                          {sub.discord_webhook_url && (
+                            <span title="Discord registered">
+                              <Radio className="w-3.5 h-3.5 text-indigo-300" />
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -129,18 +165,18 @@ export const SubscribersView: React.FC = () => {
         {/* Selected Subscriber Inspector */}
         <div className="lg:col-span-5 bg-[#111827] border border-[#243247] rounded-xl p-5 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-white pb-3 border-b border-[#243247]">
-            Recipient Preference Controls
+            Recipient Profile &amp; Preferences
           </h2>
 
           {!selectedDetails ? (
             <div className="text-center py-16 text-gray-500 text-xs">
-              Select a subscriber to inspect registered channel credentials and toggle opt-ins.
+              Select a subscriber to inspect registered channel credentials, quiet hours, and toggle opt-ins.
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-[#182234] border border-[#243247] rounded-lg p-3 text-xs space-y-1.5">
+              <div className="bg-[#182234] border border-[#243247] rounded-lg p-3 text-xs space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">ID:</span>
+                  <span className="text-gray-400">Subscriber ID:</span>
                   <span className="font-mono text-white font-medium">{selectedDetails.subscriber.id}</span>
                 </div>
                 <div className="flex justify-between">
@@ -152,6 +188,28 @@ export const SubscribersView: React.FC = () => {
                   <span className="text-gray-300">{selectedDetails.subscriber.telegram_chat_id || "None"}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-gray-400">Discord Webhook:</span>
+                  <span className="text-gray-300 font-mono text-[11px] truncate max-w-[200px]">
+                    {selectedDetails.subscriber.discord_webhook_url || "None"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-gray-400" /> Timezone:
+                  </span>
+                  <span className="text-gray-300">{selectedDetails.subscriber.timezone || "UTC"}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <Moon className="w-3 h-3 text-indigo-400" /> Quiet Hours:
+                  </span>
+                  <span className="text-gray-300">
+                    {selectedDetails.subscriber.quiet_hours_start && selectedDetails.subscriber.quiet_hours_end
+                      ? `${selectedDetails.subscriber.quiet_hours_start} to ${selectedDetails.subscriber.quiet_hours_end}`
+                      : "Disabled"}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-[#243247]">
                   <span className="text-gray-400">In-App Unread Count:</span>
                   <span className="text-indigo-400 font-bold">{selectedDetails.unread_count}</span>
                 </div>
@@ -168,6 +226,7 @@ export const SubscribersView: React.FC = () => {
                     { id: "web_push", label: "Web Push Notifications", icon: Smartphone },
                     { id: "telegram", label: "Telegram Messages", icon: Send },
                     { id: "slack", label: "Slack Alerts", icon: MessageSquare },
+                    { id: "discord", label: "Discord Webhook", icon: Radio },
                   ].map((ch) => {
                     const isEnabled = selectedDetails.preferences[ch.id] !== false;
                     const Icon = ch.icon;

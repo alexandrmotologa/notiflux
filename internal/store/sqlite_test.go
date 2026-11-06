@@ -224,3 +224,50 @@ func TestStore_IdempotencyAndDeliveryLogs(t *testing.T) {
 		t.Errorf("expected subscriber_id usr_99, got %s", logs[0].SubscriberID)
 	}
 }
+
+func TestStore_AdvancedFeatures(t *testing.T) {
+	st := setupTestStore(t)
+	tmpDir := t.TempDir()
+
+	// 1. Hot Backup
+	backupPath := filepath.Join(tmpDir, "hot_backup.db")
+	if err := st.HotBackup(backupPath); err != nil {
+		t.Fatalf("failed hot backup: %v", err)
+	}
+
+	// 2. API Keys
+	key, err := st.CreateAPIKey("Production Worker")
+	if err != nil {
+		t.Fatalf("failed creating API key: %v", err)
+	}
+	valid, err := st.ValidateAPIKey(key)
+	if err != nil || !valid {
+		t.Errorf("expected valid API key, got valid=%v err=%v", valid, err)
+	}
+	keys, err := st.ListAPIKeys()
+	if err != nil || len(keys) != 1 {
+		t.Errorf("expected 1 api key, got %d", len(keys))
+	}
+	_ = st.DeleteAPIKey(key)
+	validAfterDel, _ := st.ValidateAPIKey(key)
+	if validAfterDel {
+		t.Errorf("expected key to be invalid after deletion")
+	}
+
+	// 3. Digest Entries
+	_ = st.AddDigestEntry(&DigestEntry{
+		WorkflowID:   "weekly.digest",
+		SubscriberID: "usr_d1",
+		Payload:      `{"event":"liked_post"}`,
+	})
+	entries, err := st.GetDigestEntries("weekly.digest", "usr_d1")
+	if err != nil || len(entries) != 1 {
+		t.Errorf("expected 1 digest entry, got %d", len(entries))
+	}
+	_ = st.ClearDigestEntries("weekly.digest", "usr_d1")
+	entriesAfterDel, _ := st.GetDigestEntries("weekly.digest", "usr_d1")
+	if len(entriesAfterDel) != 0 {
+		t.Errorf("expected 0 digest entries after deletion")
+	}
+}
+

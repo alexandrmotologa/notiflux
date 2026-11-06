@@ -29,6 +29,7 @@ func NewDispatcherPool(cfg *config.Config, s *store.Store, sseHub *SSEHub) *Disp
 	pool.Register(NewWebPushDispatcher(cfg))
 	pool.Register(NewTelegramDispatcher(cfg))
 	pool.Register(NewSlackDispatcher(cfg))
+	pool.Register(NewDiscordDispatcher())
 	pool.Register(NewWebhookDispatcher(cfg))
 
 	return pool
@@ -81,6 +82,8 @@ func (p *DispatcherPool) DispatchAll(
 				Status:         status,
 				ErrorMessage:   errMsg,
 				Payload:        string(payloadBytes),
+				TrackingID:     m.TrackingID,
+				TargetURL:      m.ActionURL,
 			}
 			_ = p.store.RecordDeliveryLog(logEntry)
 

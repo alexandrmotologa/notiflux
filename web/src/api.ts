@@ -1,4 +1,4 @@
-import type { Workflow, Template, Subscriber, DeliveryLog, SystemHealth } from "./types";
+import type { Workflow, Template, Subscriber, DeliveryLog, SystemHealth, APIKeyRecord } from "./types";
 
 const BASE_URL = "";
 
@@ -104,5 +104,43 @@ export async function testChannel(channel: string, subscriber: Partial<Subscribe
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel, subscriber }),
   });
+  return res.json();
+}
+
+export async function fetchAPIKeys(): Promise<{ keys: APIKeyRecord[] }> {
+  const res = await fetch(`${BASE_URL}/v1/system/keys`);
+  return res.json();
+}
+
+export async function createAPIKey(name: string): Promise<{ key: string; name: string }> {
+  const res = await fetch(`${BASE_URL}/v1/system/keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to create API key");
+  }
+  return res.json();
+}
+
+export async function deleteAPIKey(key: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/v1/system/keys/${key}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to delete API key");
+  }
+}
+
+export async function triggerHotBackup(): Promise<{ success: boolean; backup_file: string; timestamp: string }> {
+  const res = await fetch(`${BASE_URL}/v1/system/backup`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to trigger hot backup");
+  }
   return res.json();
 }

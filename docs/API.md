@@ -265,3 +265,96 @@ POST /v1/system/vapid
   "private_key": "MC4CAQAwBQYDK2VwBCIEI..."
 }
 ```
+
+---
+
+## Workspace API Keys Management
+
+### List Active Keys
+```http
+GET /v1/system/keys
+Authorization: Bearer <ROOT_API_KEY>
+```
+
+#### Response:
+```json
+{
+  "keys": [
+    {
+      "key": "nf_bf727c56605949d590c35b72768df236",
+      "name": "Production Backend",
+      "created_at": "2026-11-07T01:00:00Z"
+    }
+  ]
+}
+```
+
+### Create Key
+```http
+POST /v1/system/keys
+Authorization: Bearer <ROOT_API_KEY>
+Content-Type: application/json
+
+{
+  "name": "CI Deployment Pipeline"
+}
+```
+
+#### Response:
+```json
+{
+  "key": "nf_88a44b1c20e24177b960d70f9b69b221",
+  "name": "CI Deployment Pipeline",
+  "created_at": "2026-11-07T01:05:00Z"
+}
+```
+
+### Delete Key
+```http
+DELETE /v1/system/keys/:key
+Authorization: Bearer <ROOT_API_KEY>
+```
+
+---
+
+## Online Hot SQLite Backup
+
+Atomic snapshot using SQLite VACUUM INTO, safe during concurrent WAL reads and writes with zero downtime.
+
+### Create Online Backup
+```http
+POST /v1/system/backup
+Authorization: Bearer <ROOT_API_KEY>
+Content-Type: application/json
+
+{
+  "destination": "backups/notiflux_daily.db"
+}
+```
+
+#### Response:
+```json
+{
+  "success": true,
+  "backup_file": "/absolute/path/to/backups/notiflux_daily.db",
+  "destination": "/absolute/path/to/backups/notiflux_daily.db",
+  "timestamp": "2026-11-07T01:10:00Z"
+}
+```
+
+---
+
+## Engagement Tracking
+
+### 1x1 Open Pixel
+Returns a transparent 1x1 PNG pixel and records the open timestamp for email analytics.
+```http
+GET /v1/o/:tracking_id.png
+```
+
+### Click Redirect
+Records the click timestamp and immediately redirects (HTTP 302) the recipient to the original action URL.
+```http
+GET /v1/r/:tracking_id
+```
+

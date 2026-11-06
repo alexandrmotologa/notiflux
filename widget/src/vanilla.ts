@@ -14,6 +14,12 @@ const styles = `
   position: relative;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   box-sizing: border-box;
+  --nf-accent-color: var(--nf-accent, #6366f1);
+  --nf-border-color: var(--nf-border, #374151);
+  --nf-bg-color: var(--nf-bg, #1f2937);
+  --nf-panel-bg-color: var(--nf-panel-bg, #111827);
+  --nf-text-color: var(--nf-text, #f3f4f6);
+  --nf-radius-size: var(--nf-radius, 12px);
 }
 
 *, *::before, *::after {
@@ -28,9 +34,9 @@ const styles = `
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid var(--nf-border, #374151);
-  background: var(--nf-bg, #1f2937);
-  color: var(--nf-text, #f3f4f6);
+  border: 1px solid var(--nf-border-color);
+  background: var(--nf-bg-color);
+  color: var(--nf-text-color);
   cursor: pointer;
   outline: none;
   transition: all 0.2s ease;
@@ -38,7 +44,7 @@ const styles = `
 
 .bell-btn:hover {
   background: var(--nf-hover, #374151);
-  border-color: var(--nf-accent, #6366f1);
+  border-color: var(--nf-accent-color);
 }
 
 .bell-icon {
@@ -62,7 +68,7 @@ const styles = `
   line-height: 1;
   padding: 3px 6px;
   border-radius: 9999px;
-  border: 2px solid var(--nf-bg, #111827);
+  border: 2px solid var(--nf-bg-color);
   animation: nf-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
@@ -82,9 +88,9 @@ const styles = `
   width: 360px;
   max-width: calc(100vw - 32px);
   max-height: 480px;
-  background: var(--nf-panel-bg, #111827);
-  border: 1px solid var(--nf-border, #374151);
-  border-radius: 12px;
+  background: var(--nf-panel-bg-color);
+  border: 1px solid var(--nf-border-color);
+  border-radius: var(--nf-radius-size);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
@@ -102,22 +108,28 @@ const styles = `
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--nf-border, #374151);
+  border-bottom: 1px solid var(--nf-border-color);
 }
 
 .header-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--nf-text, #f9fafb);
+  color: var(--nf-text-color);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .header-actions button {
   background: none;
   border: none;
-  color: var(--nf-accent, #818cf8);
+  color: var(--nf-accent-color);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -129,12 +141,24 @@ const styles = `
   background: rgba(99, 102, 241, 0.1);
 }
 
+.push-btn {
+  color: #10b981 !important;
+  font-size: 11px !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+}
+
+.push-btn:hover {
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+
 .tabs {
   display: flex;
   padding: 4px 16px;
   gap: 12px;
-  border-bottom: 1px solid var(--nf-border, #1f2937);
-  background: var(--nf-tabs-bg, #111827);
+  border-bottom: 1px solid var(--nf-border-color);
+  background: var(--nf-panel-bg-color);
 }
 
 .tab {
@@ -149,8 +173,8 @@ const styles = `
 }
 
 .tab.active {
-  color: var(--nf-accent, #818cf8);
-  border-bottom-color: var(--nf-accent, #818cf8);
+  color: var(--nf-accent-color);
+  border-bottom-color: var(--nf-accent-color);
 }
 
 .list {
@@ -183,7 +207,7 @@ const styles = `
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--nf-accent, #6366f1);
+  background: var(--nf-accent-color);
   margin-top: 5px;
   flex-shrink: 0;
 }
@@ -196,7 +220,7 @@ const styles = `
 .item-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--nf-text, #f9fafb);
+  color: var(--nf-text-color);
   margin-bottom: 2px;
 }
 
@@ -236,7 +260,7 @@ export class NotifluxBell extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return ["api-url", "subscriber-id", "theme"];
+    return ["api-url", "subscriber-id", "theme", "sound"];
   }
 
   attributeChangedCallback(name: string, oldVal: string, newVal: string) {
@@ -254,7 +278,6 @@ export class NotifluxBell extends HTMLElement {
     this.initConnection();
     this.fetchFeed();
 
-    // Close on outside click
     document.addEventListener("click", this.handleDocumentClick);
   }
 
@@ -274,11 +297,37 @@ export class NotifluxBell extends HTMLElement {
   };
 
   private get apiUrl(): string {
-    return this.getAttribute("api-url") || "http://localhost:8085";
+    return this.getAttribute("api-url") || "";
   }
 
   private get subscriberId(): string {
     return this.getAttribute("subscriber-id") || "";
+  }
+
+  private playChime() {
+    if (this.getAttribute("sound") === "false") return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {
+      // Audio autoplay policy or unavailable
+    }
   }
 
   private async fetchFeed() {
@@ -292,7 +341,7 @@ export class NotifluxBell extends HTMLElement {
         this.render();
       }
     } catch {
-      // Offline or network error
+      // Offline
     }
   }
 
@@ -322,6 +371,14 @@ export class NotifluxBell extends HTMLElement {
         const data = JSON.parse(e.data);
         if (data.notification) {
           this.notifications.unshift(data.notification);
+          this.playChime();
+
+          // Native desktop notification if permitted and in background
+          if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+            new Notification(data.notification.title, {
+              body: data.notification.body,
+            });
+          }
         }
         if (typeof data.unread_count === "number") {
           this.unreadCount = data.unread_count;
@@ -393,6 +450,14 @@ export class NotifluxBell extends HTMLElement {
     }
   }
 
+  private requestDesktopPush() {
+    if (typeof Notification !== "undefined") {
+      Notification.requestPermission().then(() => {
+        this.render();
+      });
+    }
+  }
+
   private formatTime(isoStr: string): string {
     const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
     if (diff < 60) return "just now";
@@ -407,6 +472,7 @@ export class NotifluxBell extends HTMLElement {
       : this.notifications;
 
     const badgeText = this.unreadCount > 99 ? "99+" : String(this.unreadCount);
+    const canPromptPush = typeof Notification !== "undefined" && Notification.permission === "default";
 
     this.shadow.innerHTML = `
       <style>${styles}</style>
@@ -424,7 +490,8 @@ export class NotifluxBell extends HTMLElement {
             <span>Notifications</span>
           </div>
           <div class="header-actions">
-            ${this.unreadCount > 0 ? `<button id="nf-mark-all">Mark all as read</button>` : ""}
+            ${canPromptPush ? `<button id="nf-prompt-push" class="push-btn">Enable alerts</button>` : ""}
+            ${this.unreadCount > 0 ? `<button id="nf-mark-all">Mark all read</button>` : ""}
           </div>
         </div>
 
@@ -455,7 +522,6 @@ export class NotifluxBell extends HTMLElement {
       </div>
     `;
 
-    // Attach internal event listeners
     this.shadow.getElementById("nf-bell-btn")?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.isOpen = !this.isOpen;
@@ -463,6 +529,7 @@ export class NotifluxBell extends HTMLElement {
     });
 
     this.shadow.getElementById("nf-mark-all")?.addEventListener("click", () => this.markAllRead());
+    this.shadow.getElementById("nf-prompt-push")?.addEventListener("click", () => this.requestDesktopPush());
 
     this.shadow.getElementById("nf-tab-all")?.addEventListener("click", () => {
       this.activeTab = "all";
