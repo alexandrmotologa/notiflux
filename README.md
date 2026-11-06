@@ -1,6 +1,24 @@
-# Notiflux
+<p align="center">
+  <img src="docs/images/logo.png?raw=true" alt="Notiflux Logo" width="130" style="border-radius: 24px;" />
+</p>
 
-Self-hosted multi-channel notification engine and real-time in-app notification center running under 45MB RAM.
+<h1 align="center">Notiflux</h1>
+
+<p align="center">
+  <strong>Lightweight self-hosted multi-channel notification engine and real-time in-app center under 45MB RAM.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/alexandrmotologa/notiflux/releases"><img src="https://img.shields.io/badge/version-v1.0.0-6366f1.svg?style=flat-square" alt="Version" /></a>
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square" alt="Go Version" /></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/react-19-61DAFB.svg?style=flat-square" alt="React 19" /></a>
+  <a href="https://sqlite.org"><img src="https://img.shields.io/badge/sqlite-WAL%20mode-003B57.svg?style=flat-square" alt="SQLite" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/images/notiflux_demo.gif?raw=true" alt="Notiflux Interactive Demo" width="100%" />
+</p>
 
 Notiflux provides a single-binary alternative to Novu, Knock, and Courier. It runs with zero external infrastructure dependencies, using embedded SQLite in Write-Ahead Logging (WAL) mode for message storage, user preferences, and delivery logs.
 
@@ -114,6 +132,20 @@ curl -X POST http://localhost:8085/v1/trigger \
     }
   }'
 ```
+
+---
+
+## Studio Interface & Mobile Responsiveness
+
+The embedded React 19 management studio is fully responsive across desktop workstations and mobile screens:
+
+| Desktop Administration Cockpit | Integration Code Snippets |
+| :---: | :---: |
+| ![Notiflux Dashboard](docs/images/notiflux_dashboard.png?raw=true) | ![Notiflux Workflows](docs/images/notiflux_workflows.png?raw=true) |
+
+| Delivery Logs & Engagement Tracking | Mobile Drawer Navigation (390px) |
+| :---: | :---: |
+| ![Notiflux Delivery Logs](docs/images/notiflux_logs.png?raw=true) | <img src="docs/images/notiflux_mobile.png?raw=true" width="280" alt="Notiflux Mobile Responsive Drawer" /> |
 
 ---
 

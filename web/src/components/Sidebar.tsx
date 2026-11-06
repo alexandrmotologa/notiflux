@@ -8,15 +8,24 @@ import {
   Settings,
   Activity,
   Bell,
+  X,
 } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   memoryMB?: number;
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memoryMB }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  setActiveTab,
+  memoryMB,
+  isOpenMobile = false,
+  onCloseMobile,
+}) => {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "workflows", label: "Workflows", icon: GitBranch },
@@ -27,20 +36,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memor
     { id: "system", label: "System Health", icon: Activity },
   ];
 
-  return (
-    <aside className="w-64 bg-[#111827] border-r border-[#243247] flex flex-col justify-between shrink-0 select-none">
+  const handleSelectTab = (id: string) => {
+    setActiveTab(id);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full justify-between">
       <div>
         {/* Brand header */}
-        <div className="h-16 flex items-center px-6 gap-3 border-b border-[#243247]">
-          <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-            <Bell className="w-5 h-5" />
+        <div className="h-16 flex items-center justify-between px-6 border-b border-[#243247]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-bold text-lg text-white tracking-tight">Notiflux</span>
+              <span className="text-[10px] uppercase font-semibold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 ml-2">
+                Studio
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-bold text-lg text-white tracking-tight">Notiflux</span>
-            <span className="text-[10px] uppercase font-semibold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 ml-2">
-              Studio
-            </span>
-          </div>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="md:hidden text-gray-400 hover:text-white p-1 rounded-lg"
+              aria-label="Close navigation"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Navigation list */}
@@ -51,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memor
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleSelectTab(item.id)}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30"
@@ -87,6 +114,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memor
           </div>
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden md:flex w-64 bg-[#111827] border-r border-[#243247] flex-col shrink-0 select-none">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Slide-over Drawer */}
+      {isOpenMobile && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={onCloseMobile}
+          />
+          <aside className="fixed inset-y-0 left-0 w-64 bg-[#111827] border-r border-[#243247] flex flex-col z-50 select-none shadow-2xl animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

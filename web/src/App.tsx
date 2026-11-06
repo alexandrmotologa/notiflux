@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Menu } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { WorkflowsView } from "./components/WorkflowsView";
@@ -16,6 +17,7 @@ export const App: React.FC = () => {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<DeliveryLog[]>([]);
   const [targetWorkflowForTemplates, setTargetWorkflowForTemplates] = useState<string | undefined>();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -50,15 +52,24 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         memoryMB={health?.memory_alloc_mb}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="h-16 bg-[#111827] border-b border-[#243247] px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400 font-medium">Notiflux Studio</span>
-            <span className="text-gray-600">/</span>
+        <header className="h-16 bg-[#111827] border-b border-[#243247] px-4 sm:px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 text-sm">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden text-gray-400 hover:text-white p-1 rounded-lg"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="text-gray-400 font-medium hidden sm:inline">Notiflux Studio</span>
+            <span className="text-gray-600 hidden sm:inline">/</span>
             <span className="text-white font-semibold capitalize">{activeTab}</span>
           </div>
 
