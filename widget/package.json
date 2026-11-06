@@ -1,0 +1,38 @@
+{
+  "name": "@notiflux/bell",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight real-time in-app notification center bell widget (< 3KB)",
+  "main": "dist/notiflux-bell.js",
+  "module": "dist/notiflux-bell.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly",
+    "dev": "vite"
+  },
+  "keywords": [
+    "notiflux",
+    "notifications",
+    "in-app",
+    "bell",
+    "real-time",
+    "sse",
+    "widget"
+  ],
+  "author": "Alexandr Motologa",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}

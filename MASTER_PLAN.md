@@ -225,60 +225,60 @@ The client widget and SSE stream use scoped public tokens or direct recipient qu
 ## 6. Implementation Tasks & Verification Roadmap
 
 ### Task 1: Project Setup, Tooling & Configuration
-- [ ] 1.1: Initialize Go module `github.com/alexandrmotologa/notiflux` with dependencies (`go-chi`, `modernc.org/sqlite`, `resend-go`, `webpush-go`).
-- [ ] 1.2: Implement configuration loader (`internal/config/config.go`) reading environment variables and YAML flags with strict validation.
-- [ ] 1.3: Create root CLI daemon commands (`cmd/notiflux/main.go`) supporting `serve`, `vapid`, and `version`.
-- [ ] 1.4: Configure Makefile with test, build, and static bundle targets.
+- [x] 1.1: Initialize Go module `github.com/alexandrmotologa/notiflux` with dependencies (`go-chi`, `modernc.org/sqlite`, `resend-go`, `webpush-go`).
+- [x] 1.2: Implement configuration loader (`internal/config/config.go`) reading environment variables and YAML flags with strict validation.
+- [x] 1.3: Create root CLI daemon commands (`cmd/notiflux/main.go`) supporting `serve`, `vapid`, and `version`.
+- [x] 1.4: Configure Makefile with test, build, and static bundle targets.
 
 ### Task 2: Pure Go Storage Layer (SQLite WAL Mode)
-- [ ] 2.1: Implement SQLite storage engine (`internal/store/sqlite.go`) with WAL pragmas and connection pooling.
-- [ ] 2.2: Implement schema migrations (`internal/store/schema.go`).
-- [ ] 2.3: Implement repository models and query methods for workflows, templates, subscribers, preferences, notifications, delivery logs, and idempotency keys.
-- [ ] 2.4: Write unit tests verifying database operations, concurrent writes, and foreign key cascades.
+- [x] 2.1: Implement SQLite storage engine (`internal/store/sqlite.go`) with WAL pragmas and connection pooling.
+- [x] 2.2: Implement schema migrations (`internal/store/schema.go`).
+- [x] 2.3: Implement repository models and query methods for workflows, templates, subscribers, preferences, notifications, delivery logs, and idempotency keys.
+- [x] 2.4: Write unit tests verifying database operations, concurrent writes, and foreign key cascades.
 
 ### Task 3: Template Engine & Interpolation Processor
-- [ ] 3.1: Implement high-speed template compiler (`internal/engine/compiler.go`) parsing Mustache variables, nested maps, and conditional blocks.
-- [ ] 3.2: Implement Markdown-to-HTML parser with inline email styles for clean transactional email rendering.
-- [ ] 3.3: Write unit tests covering variable replacement, escaping, missing properties, and markdown conversions.
+- [x] 3.1: Implement high-speed template compiler (`internal/engine/compiler.go`) parsing Mustache variables, nested maps, and conditional blocks.
+- [x] 3.2: Implement Markdown-to-HTML parser with inline email styles for clean transactional email rendering.
+- [x] 3.3: Write unit tests covering variable replacement, escaping, missing properties, and markdown conversions.
 
 ### Task 4: Workflow Router & Preferences Engine
-- [ ] 4.1: Implement recipient preference evaluator (`internal/engine/preferences.go`) checking channel opt-in, global opt-outs, and delivery overrides.
-- [ ] 4.2: Implement workflow orchestrator (`internal/engine/workflow.go`) coordinating channel dispatches and recording delivery logs.
-- [ ] 4.3: Implement idempotency evaluator (`internal/engine/idempotency.go`) caching responses and preventing duplicate sends.
+- [x] 4.1: Implement recipient preference evaluator (`internal/engine/preferences.go`) checking channel opt-in, global opt-outs, and delivery overrides.
+- [x] 4.2: Implement workflow orchestrator (`internal/engine/workflow.go`) coordinating channel dispatches and recording delivery logs.
+- [x] 4.3: Implement idempotency evaluator (`internal/engine/idempotency.go`) caching responses and preventing duplicate sends.
 
 ### Task 5: Multi-Channel Dispatchers
-- [ ] 5.1: In-App Dispatcher (`internal/channels/inapp.go`): Persist messages and push to active SSE streams.
-- [ ] 5.2: Email Dispatcher (`internal/channels/email.go`): Dual-mode dispatcher supporting SMTP (STARTTLS/TLS) and Resend REST API.
-- [ ] 5.3: Web Push Dispatcher (`internal/channels/webpush.go`): RFC 8292 VAPID ECDSA P-256 signer and aes128gcm payload encryptor.
-- [ ] 5.4: Telegram Dispatcher (`internal/channels/telegram.go`): Telegram Bot API client with markdown parsing and action buttons.
-- [ ] 5.5: Slack Dispatcher (`internal/channels/slack.go`): Slack incoming webhook dispatcher with block layouts.
-- [ ] 5.6: Outbound Webhook Dispatcher (`internal/channels/webhook.go`): HTTPS POST with HMAC-SHA256 signature calculation.
-- [ ] 5.7: Write mock integration tests for all dispatchers verifying payload delivery and error handling.
+- [x] 5.1: In-App Dispatcher (`internal/channels/inapp.go`): Persist messages and push to active SSE streams.
+- [x] 5.2: Email Dispatcher (`internal/channels/email.go`): Dual-mode dispatcher supporting SMTP (STARTTLS/TLS) and Resend REST API.
+- [x] 5.3: Web Push Dispatcher (`internal/channels/webpush.go`): RFC 8292 VAPID ECDSA P-256 signer and aes128gcm payload encryptor.
+- [x] 5.4: Telegram Dispatcher (`internal/channels/telegram.go`): Telegram Bot API client with markdown parsing and action buttons.
+- [x] 5.5: Slack Dispatcher (`internal/channels/slack.go`): Slack incoming webhook dispatcher with block layouts.
+- [x] 5.6: Outbound Webhook Dispatcher (`internal/channels/webhook.go`): HTTPS POST with HMAC-SHA256 signature calculation.
+- [x] 5.7: Write mock integration tests for all dispatchers verifying payload delivery and error handling.
 
 ### Task 6: Real-Time SSE Hub & Feed APIs
-- [ ] 6.1: Implement SSE broker (`internal/api/sse.go`) with subscriber channel subscriptions, 15s heartbeats, and client disconnect cleanup.
-- [ ] 6.2: Implement Feed API routes (`internal/api/feed.go`): fetch feed, mark read/unread, mark all read, delete.
-- [ ] 6.3: Implement Trigger API routes (`internal/api/triggers.go`): single trigger and batch trigger.
-- [ ] 6.4: Implement Preferences, Workflows, Templates, and Logs REST endpoints.
+- [x] 6.1: Implement SSE broker (`internal/channels/sse_hub.go`) with subscriber channel subscriptions, 15s heartbeats, and client disconnect cleanup.
+- [x] 6.2: Implement Feed API routes (`internal/api/feed.go`): fetch feed, mark read/unread, mark all read, delete.
+- [x] 6.3: Implement Trigger API routes (`internal/api/triggers.go`): single trigger and batch trigger.
+- [x] 6.4: Implement Preferences, Workflows, Templates, and Logs REST endpoints.
 
 ### Task 7: Client Drop-In Widget (< 3KB)
-- [ ] 7.1: Build Vanilla Web Component `<notiflux-bell>` in `widget/src/vanilla.ts` with zero dependencies, shadow DOM styling, and real-time SSE listener.
-- [ ] 7.2: Build React 19 `<NotificationBell />` wrapper in `widget/src/bell.tsx`.
-- [ ] 7.3: Implement dropdown popover with unread counter badge, relative timestamps, tabs, and mark-read interactions.
-- [ ] 7.4: Configure rollup/vite bundle generating `notiflux-bell.js` and `notiflux-bell.css` under 3KB gzipped.
-- [ ] 7.5: Embed widget bundle directly into Go server at `/widget/notiflux-bell.js`.
+- [x] 7.1: Build Vanilla Web Component `<notiflux-bell>` in `widget/src/vanilla.ts` with zero dependencies, shadow DOM styling, and real-time SSE listener.
+- [x] 7.2: Build React 19 `<NotificationBell />` wrapper in `widget/src/bell.tsx`.
+- [x] 7.3: Implement dropdown popover with unread counter badge, relative timestamps, tabs, and mark-read interactions.
+- [x] 7.4: Configure rollup/vite bundle generating `notiflux-bell.js` and `notiflux-bell.css` under 3KB gzipped.
+- [x] 7.5: Embed widget bundle directly into Go server at `/widget/notiflux-bell.js`.
 
 ### Task 8: Embedded React 19 Administration Studio
-- [ ] 8.1: Scaffold React 19 + TypeScript + Vite + Tailwind studio in `web/`.
-- [ ] 8.2: Build Dashboard view with live memory meter, connection counts, and delivery metrics.
-- [ ] 8.3: Build Workflow Editor for configuring channels and execution rules.
-- [ ] 8.4: Build Template Designer with live preview for Email, Push, In-App, Telegram, and Slack.
-- [ ] 8.5: Build Delivery Logs viewer with live stream filtering and payload inspection.
-- [ ] 8.6: Build Subscribers and Channel Settings inspectors with credential test runners.
-- [ ] 8.7: Build static assets into `web/dist` and embed them into the Go binary with `//go:embed`.
+- [x] 8.1: Scaffold React 19 + TypeScript + Vite + Tailwind studio in `web/`.
+- [x] 8.2: Build Dashboard view with live memory meter, connection counts, and delivery metrics.
+- [x] 8.3: Build Workflow Editor for configuring channels and execution rules.
+- [x] 8.4: Build Template Designer with live preview for Email, Push, In-App, Telegram, and Slack.
+- [x] 8.5: Build Delivery Logs viewer with live stream filtering and payload inspection.
+- [x] 8.6: Build Subscribers and Channel Settings inspectors with credential test runners.
+- [x] 8.7: Build static assets into `web/dist` and embed them into the Go binary with `//go:embed`.
 
 ### Task 9: System Integration, Benchmarks & Documentation
-- [ ] 9.1: Write end-to-end integration test suite exercising the entire trigger-to-widget pipeline.
-- [ ] 9.2: Verify RAM usage remains below 45MB during idle and under active load.
-- [ ] 9.3: Create comprehensive README.md following humanizer guidelines (no em dashes, factual, no AI clichés).
-- [ ] 9.4: Provide Dockerfile and Docker Compose configurations for production deployment.
+- [x] 9.1: Write end-to-end integration test suite exercising the entire trigger-to-widget pipeline.
+- [x] 9.2: Verify RAM usage remains below 45MB during idle and under active load.
+- [x] 9.3: Create comprehensive README.md following humanizer guidelines (no em dashes, factual, no AI clichés).
+- [x] 9.4: Provide Dockerfile and Docker Compose configurations for production deployment.
