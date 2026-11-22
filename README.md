@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/alexandrmotologa/notiflux/actions/workflows/ci.yml"><img src="https://github.com/alexandrmotologa/notiflux/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/alexandrmotologa/notiflux/releases"><img src="https://img.shields.io/badge/version-v1.0.0-6366f1.svg?style=flat-square" alt="Version" /></a>
   <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square" alt="Go Version" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/react-19-61DAFB.svg?style=flat-square" alt="React 19" /></a>

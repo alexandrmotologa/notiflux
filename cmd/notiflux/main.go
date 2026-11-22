@@ -25,7 +25,7 @@ func main() {
 
 	if len(args) > 0 {
 		switch args[0] {
-		case "version", "--version", "-v":
+		case "version", "--version", "-v", "-V":
 			fmt.Printf("notiflux v%s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
 			return
 		case "vapid", "generate-vapid":
@@ -39,6 +39,13 @@ func main() {
 			return
 		case "serve":
 			args = args[1:]
+		}
+	}
+
+	for _, arg := range args {
+		if arg == "version" || arg == "--version" || arg == "-v" || arg == "-V" {
+			fmt.Printf("notiflux v%s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
+			return
 		}
 	}
 
